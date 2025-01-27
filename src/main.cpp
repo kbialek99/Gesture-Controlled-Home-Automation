@@ -7,7 +7,7 @@
 
 #include "camera_pins.h"
 
-const char *serverUrl = "http://192.168.0.137:80/upload";
+const char *serverUrl = "http://192.168.0.137:8080/upload";
 
 void startCamera() {
 camera_config_t config;

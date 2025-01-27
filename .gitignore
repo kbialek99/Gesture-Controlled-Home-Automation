@@ -5,3 +5,4 @@
 .vscode/ipch
 GestureProcessingServer/.idea
 GestureProcessingServer/__pycache__/GestureClassification.cpython-310.pyc
+include/secrets.h
