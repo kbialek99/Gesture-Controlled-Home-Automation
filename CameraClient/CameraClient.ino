@@ -7,14 +7,14 @@
 
 #include "camera_pins.h"
 
-const char *serverUrl = "http://192.168.0.137:8080/upload";
+const char *serverUrl = "http://192.168.0.137:8080/upload"; // replace with ip of the device that the server is running on
 
 void startCamera() {
 camera_config_t config;
 config.ledc_channel = LEDC_CHANNEL_0;
 config.ledc_timer = LEDC_TIMER_0;
 config.pin_d0 = Y2_GPIO_NUM;
-config.pin_d1 = Y3_GPIO_NUM;
+config.pin_d1 = Y3_GPIO_NUM; 
 config.pin_d2 = Y4_GPIO_NUM;
 config.pin_d3 = Y5_GPIO_NUM;
 config.pin_d4 = Y6_GPIO_NUM;
@@ -33,7 +33,7 @@ config.pin_reset = RESET_GPIO_NUM;
 // Adjusted parameters for face/gesture recognition
 config.xclk_freq_hz = 20000000;          // Keep the clock frequency at 20 MHz
 config.frame_size = FRAMESIZE_VGA;       // Use VGA (640x480) for good balance of detail and size
-config.pixel_format = PIXFORMAT_JPEG;  // Use RGB565 for better color and detail (if server processes raw data)
+config.pixel_format = PIXFORMAT_JPEG;  // Use JPEG for compressed frames if bandwidth is limited
 // Alternative: Use PIXFORMAT_JPEG for compressed frames if bandwidth is limited
 config.grab_mode = CAMERA_GRAB_LATEST;   // Grab the latest frame to reduce latency
 config.fb_location = CAMERA_FB_IN_PSRAM; // Use PSRAM for frame buffering
@@ -42,14 +42,12 @@ config.fb_count = 2;                     // Double buffering for smoother frame 
 
 
   // Initialize camera
-  if (esp_camera_init(&config) != ESP_OK) {
-    Serial.println("Camera initialization failed!");
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("Camera initialization failed! Error code: 0x%x\n", err);
     while (true);
-  }
-  else
-  {
-    Serial.println("Camera initialization succesfull!");
-
+  } else {
+    Serial.println("Camera initialization successful!");
   }
 }
 
