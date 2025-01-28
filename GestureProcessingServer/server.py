@@ -2,13 +2,13 @@ from flask import Flask, Response, stream_with_context, request
 import cv2
 import numpy as np
 import mediapipe as mp
-from GestureClassification import is_thumbs_up
+import paho.mqtt.client as mqtt
+from credentials import mqtt_broker, mqtt_user, mqtt_password, mqtt_port, mqtt_topic
 
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 app = Flask(__name__)
-
 
 # Frame buffer to hold the latest frame
 latest_frame = None
@@ -16,7 +16,7 @@ latest_frame = None
 # Initialize GestureRecognizer
 VisionRunningMode = mp.tasks.vision.RunningMode
 base_options = python.BaseOptions(model_asset_path='gesture_recognizer.task')
-options = vision.GestureRecognizerOptions(base_options=base_options, min_hand_detection_confidence=0.3 )
+options = vision.GestureRecognizerOptions(base_options=base_options, min_hand_detection_confidence=0.3)
 recognizer = vision.GestureRecognizer.create_from_options(options)
 
 # Initialize Mediapipe Face Detection
@@ -26,9 +26,22 @@ face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
 
 mp_hands_data = mp.solutions.hands
 mp_hands = mp_hands_data.Hands(static_image_mode=False,
-                                       max_num_hands=2,
-                                       min_detection_confidence=0.5,
-                                       min_tracking_confidence=0.5)
+                               max_num_hands=2,
+                               min_detection_confidence=0.5,
+                               min_tracking_confidence=0.5)
+
+# MQTT Client setup
+
+mqtt_client = mqtt.Client()
+
+# Set username and password for MQTT
+mqtt_client.username_pw_set(mqtt_user, mqtt_password)
+
+# Connect to MQTT broker
+mqtt_client.connect(mqtt_broker, mqtt_port, 60)
+
+# Variable to track last published gesture
+last_published_gesture = None
 
 
 @app.route('/upload', methods=['POST'])
@@ -46,6 +59,7 @@ def stream_frames():
     @stream_with_context
     def generate():
         global latest_frame
+        global last_published_gesture
         while True:
             if latest_frame:
                 # Decode JPEG frame to OpenCV format
@@ -59,7 +73,6 @@ def stream_frames():
                     results_face = face_detection.process(rgb_frame)
                     results_hand = mp_hands.process(rgb_frame)
 
-
                     # Draw bounding boxes if faces are detected
                     if results_face.detections:
                         for detection in results_face.detections:
@@ -70,29 +83,6 @@ def stream_frames():
                             # Draw rectangle around the face
                             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-
-                    '''
-                    # Draw hand landmarks and bounding boxes
-                    if results_hand.multi_hand_landmarks:
-                        for hand_landmarks, hand_handeness in zip(results_hand.multi_hand_landmarks, results_hand.multi_handedness):
-                            handedness = hand_handeness.classification[0].label  # "Right" or "Left"
-                            mp_drawing.draw_landmarks(
-                                frame, hand_landmarks, mp_hands_data.HAND_CONNECTIONS)
-
-                            # Extract bounding box coordinates
-                            h, w, _ = frame.shape
-                            x_min = int(min([lm.x for lm in hand_landmarks.landmark]) * w)
-                            y_min = int(min([lm.y for lm in hand_landmarks.landmark]) * h)
-                            x_max = int(max([lm.x for lm in hand_landmarks.landmark]) * w)
-                            y_max = int(max([lm.y for lm in hand_landmarks.landmark]) * h)
-
-                            if is_thumbs_up(hand_landmarks, handedness):
-                                cv2.putText(frame, "Thumbs Up", (x_min, y_min - 10),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
-                            # Draw bounding box
-                            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-                    '''
                     # Convert the frame to a Mediapipe Image format
                     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
@@ -105,17 +95,32 @@ def stream_frames():
                         gesture_name = top_gesture.category_name
                         confidence = top_gesture.score
 
-                        # Draw gesture label on the frame
+                        # If hand landmarks are available, draw them as well
+                        if results_hand.multi_hand_landmarks:
+                            for hand_landmarks, hand_handeness in zip(results_hand.multi_hand_landmarks,
+                                                                      results_hand.multi_handedness):
+                                handedness = hand_handeness.classification[0].label  # "Right" or "Left"
+                                mp_drawing.draw_landmarks(
+                                    frame, hand_landmarks, mp_hands_data.HAND_CONNECTIONS)
+                                if handedness == "Right":
+                                    if "_L" not in gesture_name:
+                                        gesture_name += "_L"
+                                elif handedness == "Left":
+                                    if "_R" not in gesture_name:
+                                        gesture_name += "_R"
+
+                        # Display gesture name and confidence
                         cv2.putText(frame, f'{gesture_name} ({confidence:.2f})', (10, 30),
                                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                    # # If hand landmarks are available, draw them as well
-                    if results_hand.multi_hand_landmarks:
-                        for hand_landmarks, hand_handeness in zip(results_hand.multi_hand_landmarks, results_hand.multi_handedness):
-                            handedness = hand_handeness.classification[0].label  # "Right" or "Left"
-                            mp_drawing.draw_landmarks(
-                                frame, hand_landmarks, mp_hands_data.HAND_CONNECTIONS)
-
+                        # Avoid publishing if gesture is the same as the last one
+                        if gesture_name != last_published_gesture and "None" not in gesture_name:
+                            # Publish gesture to MQTT
+                            mqtt_client.publish(mqtt_topic, gesture_name)
+                            last_published_gesture = gesture_name
+                            print(f"Published gesture: {gesture_name}")
+                        elif gesture_name == "None":
+                            print("No gesture detected. Skipping publishing.")
 
                     # Encode frame back to JPEG
                     _, jpeg_frame = cv2.imencode('.jpg', frame)
@@ -128,4 +133,4 @@ def stream_frames():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)
