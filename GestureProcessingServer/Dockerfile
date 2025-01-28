@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx  # This is the package that provides libGL.so.1
 
 # Expose the port that the Flask app will run on
-EXPOSE 80
+EXPOSE 8080
 
 # Command to run your app
 CMD ["python", "server.py"]
+  
