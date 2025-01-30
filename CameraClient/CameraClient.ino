@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <esp_camera.h>
 #include <HTTPClient.h>
+#include <PubSubClient.h>
 #include <secrets.h>
 
 #define CAMERA_MODEL_XIAO_ESP32S3 // Has PSRAM
@@ -8,6 +9,10 @@
 #include "camera_pins.h"
 
 const char *serverUrl = "http://192.168.0.137:8080/upload"; // replace with ip of the device that the server is running on
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+bool sendFrameFlag = false;
 
 void startCamera() {
 camera_config_t config;
@@ -51,6 +56,11 @@ config.fb_count = 2;                     // Double buffering for smoother frame 
   }
 }
 
+void stopCamera() {
+    esp_camera_deinit();
+    Serial.println("Camera deinitialized to reduce heating.");
+}
+
 void sendFrameToServer() {
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
@@ -74,6 +84,42 @@ void sendFrameToServer() {
   esp_camera_fb_return(fb);
 }
 
+void callback(char* topic, byte* payload, unsigned int length) {
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+    payload[length] = '\0'; // Null-terminate the payload
+    Serial.println((char*)payload);
+
+    if (strcmp(topic, "wakeup/espCamera") == 0) {
+        int command = atoi((char*)payload);
+        if (command == 1) {
+            Serial.println("Starting frame capture");
+            startCamera();
+            sendFrameFlag = true;
+        } else if (command == 0) {
+            Serial.println("Stopping frame capture");
+            sendFrameFlag = false;
+            stopCamera();
+        }
+    }
+}
+
+void reconnect() {
+    while (!client.connected()) {
+        Serial.print("Attempting MQTT connection...");
+        if (client.connect("ESP32CameraClient", mqtt_user, mqtt_password)) {
+            Serial.println("connected");
+            client.subscribe("wakeup/espCamera");
+        } else {
+            Serial.print("failed, rc=");
+            Serial.print(client.state());
+            Serial.println(" try again in 5 seconds");
+            delay(5000);
+        }
+    }
+}
+
 void setup() {
   Serial.begin(115200);
   WiFi.begin(ssid, password);
@@ -89,15 +135,23 @@ void setup() {
   Serial.print("Connected! IP address: ");
   Serial.println(WiFi.localIP());
 
-  startCamera();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+  //startCamera();
 }
 
 void loop() {
-  static unsigned long lastTime = 0;
+    static unsigned long lastTime = 0;
   static int frameCount = 0;
-  // Send the frame to the server
-  sendFrameToServer();
-  // Count frames per second
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+  if (sendFrameFlag) {
+    sendFrameToServer();
+      // Count frames per second
   frameCount++;
   unsigned long currentTime = millis();
   if (currentTime - lastTime >= 1000) {  // Every second
@@ -106,4 +160,5 @@ void loop() {
       lastTime = currentTime;
   }
   delay(15);
+  }
 }
