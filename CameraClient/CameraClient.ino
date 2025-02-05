@@ -10,6 +10,8 @@
 
 const char *serverUrl = "http://192.168.0.137:8080/upload"; // replace with ip of the device that the server is running on
 
+#define PIR_PIN 10 // Define the pin for the PIR sensor
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 bool sendFrameFlag = false;
@@ -120,6 +122,20 @@ void reconnect() {
     }
 }
 
+bool detectMotion() {
+  if (digitalRead(PIR_PIN) == HIGH) {
+    Serial.println("Motion detected!");
+    return true;
+    //startCamera();
+    //sendFrameFlag = true;
+  } else {
+    Serial.println("Motion stopped!");
+    return false;
+    //sendFrameFlag = false;
+    //stopCamera();
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   WiFi.begin(ssid, password);
@@ -138,17 +154,26 @@ void setup() {
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
+  pinMode(PIR_PIN, INPUT);
+  //attachInterrupt(digitalPinToInterrupt(PIR_PIN), detectMotion, CHANGE);
+
   //startCamera();
 }
 
 void loop() {
-    static unsigned long lastTime = 0;
+  static unsigned long lastReadTime = 0;
+  unsigned long currentTime = millis();
+  static unsigned long lastTime = 0;
   static int frameCount = 0;
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
 
+  if (currentTime - lastReadTime >= 1000) {  // Read PIR sensor every 1 second
+    lastReadTime = currentTime; 
+      (void)detectMotion();
+  }
   if (sendFrameFlag) {
     sendFrameToServer();
       // Count frames per second
