@@ -1,8 +1,45 @@
 #include <WiFi.h>
 #include <secrets.h>
 #include "inc/Camera.hpp"
+#include <PubSubClient.h>
+#include <esp_sleep.h>
 
+#define PIN_HIGH 1
+#define PIN_LOW 0
+#define MOTION_DETECTED_THRESHOLD 1
+
+const char *serverUrl = "http://192.168.0.137:8080/upload"; // replace with ip of the device that the server is running on
+const char *logUrl = "http://192.168.0.137:8080/log";       // replace with ip of the device that the server is running on
+
+#define PIR_PIN GPIO_NUM_1 // Define the pin for the PIR sensor
+
+WiFiClient espClient;
+bool sendFrameFlag = false;
+PubSubClient client(espClient);
+bool sendFrameFlag = false;
+unsigned long lastMotionTime = 0;
+int motionDetectedCount = 0;
 Camera camera;
+
+void sendLogToServer(const char *message)
+{
+  HTTPClient http;
+  http.begin(logUrl);
+  http.addHeader("Content-Type", "text/plain");
+
+  int httpResponseCode = http.POST((uint8_t *)message, strlen(message));
+
+  if (httpResponseCode > 0)
+  {
+    // Log sent successfully
+  }
+  else
+  {
+    // Error sending log
+  }
+
+  http.end();
+}
 
 void callback(char *topic, byte *payload, unsigned int length)
 {
@@ -18,14 +55,14 @@ void callback(char *topic, byte *payload, unsigned int length)
     if (command == 1)
     {
       Serial.println("Starting frame capture");
-      startCamera();
+      camera.startCamera();
       sendFrameFlag = true;
     }
     else if (command == 0)
     {
       Serial.println("Stopping frame capture");
       sendFrameFlag = false;
-      stopCamera();
+      camera.stopCamera();
     }
   }
 }
@@ -83,7 +120,7 @@ void setup()
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
-  pinMode(PIR_PIN, INPUT_PULLUP); // Ensure the pin is properly configured
+  pinMode(PIR_PIN, INPUT_PULLDOWN); // Ensure the pin is properly configured
 
   // Check wake-up reason
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -147,7 +184,7 @@ void loop()
     motionState = false;
     sendLogToServer("No motion detected for 10 seconds, going to deep sleep.");
     Serial.println("Entering deep sleep...");        // Debugging line
-    stopCamera();                                    // Deinitialize camera to reduce heating
+    camera.stopCamera();                                    // Deinitialize camera to reduce heating
     delay(100);                                      // Ensure the log message is sent before sleeping
     esp_sleep_enable_ext0_wakeup(PIR_PIN, PIN_HIGH); // Wake up when motion is detected (rising edge)
     esp_deep_sleep_start();
