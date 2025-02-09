@@ -43,6 +43,10 @@ mqtt_client.connect(mqtt_broker, mqtt_port, 60)
 # Variable to track last published gesture
 last_published_gesture = None
 
+def on_publish(client, userdata, mid):
+    print("Message Published...")
+
+mqtt_client.on_publish = on_publish
 
 @app.route('/upload', methods=['POST'])
 def upload_frame():
@@ -116,11 +120,12 @@ def stream_frames():
                         # Avoid publishing if gesture is the same as the last one
                         if gesture_name != last_published_gesture and "None" not in gesture_name:
                             # Publish gesture to MQTT
-                            mqtt_client.publish(mqtt_topic, gesture_name)
+                            result = mqtt_client.publish(mqtt_topic, gesture_name)
+                            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                                print(f"Published gesture: {gesture_name}")
+                            else:
+                                print(f"Failed to publish gesture: {gesture_name}")
                             last_published_gesture = gesture_name
-                            print(f"Published gesture: {gesture_name}")
-                        elif gesture_name == "None":
-                            print("No gesture detected. Skipping publishing.")
 
                     # Encode frame back to JPEG
                     _, jpeg_frame = cv2.imencode('.jpg', frame)
@@ -131,6 +136,14 @@ def stream_frames():
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/log', methods=['POST'])
+def receive_log():
+    if request.data:
+        log_message = request.data.decode('utf-8')
+        print(f"Log from client: {log_message}")
+        return "Log received", 200
+    else:
+        return "No log received", 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
