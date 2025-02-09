@@ -42,6 +42,12 @@ void Camera::startCamera() {
     }
 }
 
+void Camera::stopCamera()
+{
+  esp_camera_deinit();
+  //sendLogToServer("Camera deinitialized to reduce heating.");
+}
+
 void Camera::sendFrameToServer() {
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {

@@ -19,5 +19,5 @@ public:
     Camera();
     void startCamera();
     void sendFrameToServer();
-    void stop();
+    void stopCamera();
 };
