@@ -190,6 +190,17 @@ def stream_frames():
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+
+@app.route('/log', methods=['POST'])
+def receive_log():
+    if request.data:
+        log_message = request.data.decode('utf-8')
+        print(f"Log from client: {log_message}")
+        return "Log received", 200
+    else:
+        return "No log received", 400
+
+
 if __name__ == '__main__':
     # Start the frame processing thread
     frame_processing_thread = threading.Thread(target=process_frames)
