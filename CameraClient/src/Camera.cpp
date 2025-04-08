@@ -1,4 +1,6 @@
-#include "../inc/Camera.hpp"
+#include "../include/Camera.hpp"
+
+Camera* Camera::instancePtr = nullptr;
 
 Camera::Camera() {
     config.ledc_channel = LEDC_CHANNEL_0;
@@ -15,8 +17,8 @@ Camera::Camera() {
     config.pin_pclk = PCLK_GPIO_NUM;
     config.pin_vsync = VSYNC_GPIO_NUM;
     config.pin_href = HREF_GPIO_NUM;
-    config.pin_sscb_sda = SIOD_GPIO_NUM;
-    config.pin_sscb_scl = SIOC_GPIO_NUM;
+    config.pin_sccb_sda = SIOD_GPIO_NUM;
+    config.pin_sccb_scl = SIOC_GPIO_NUM;
     config.pin_pwdn = PWDN_GPIO_NUM;
     config.pin_reset = RESET_GPIO_NUM;
 
@@ -31,7 +33,7 @@ Camera::Camera() {
     config.fb_count = 2;                     // Double buffering for smoother frame capture
     }
 
-void Camera::startCamera() {
+void Camera::startCamera() const {
     // Initialize camera
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
@@ -42,31 +44,8 @@ void Camera::startCamera() {
     }
 }
 
-void Camera::stopCamera()
+void Camera::stopCamera() const
 {
   esp_camera_deinit();
   //sendLogToServer("Camera deinitialized to reduce heating.");
-}
-
-void Camera::sendFrameToServer() {
-  camera_fb_t *fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Failed to capture frame");
-    return;
-  }
-
-  HTTPClient http;
-  http.begin(serverUrl);
-  http.addHeader("Content-Type", "image/jpeg");
-
-  int httpResponseCode = http.POST(fb->buf, fb->len);
-
-  if (httpResponseCode > 0) {
-    //Serial.printf("Frame sent successfully! HTTP Response code: %d\n", httpResponseCode);
-  } else {
-    //Serial.printf("Error sending frame: %s\n", http.errorToString(httpResponseCode).c_str());
-  }
-
-  http.end();
-  esp_camera_fb_return(fb);
 }
