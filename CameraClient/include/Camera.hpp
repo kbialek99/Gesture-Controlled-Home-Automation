@@ -8,20 +8,10 @@
 #include "camera_pins.h"
 
 class Camera {
-private:
-    camera_config_t config;
-    static Camera* instancePtr;
-    Camera();
 
 public:
-    Camera(Camera const&) = delete;
-    
-    static Camera* getInstance() {
-        if(instancePtr == nullptr){
-            instancePtr = new Camera();
-        }
-        return instancePtr;
-    }
-    void startCamera() const;
-    void stopCamera() const ;
+    Camera() = default;
+    virtual ~Camera() = default; 
+    virtual void startCamera() const = 0;
+    virtual void stopCamera() const = 0;
 };

@@ -2,7 +2,8 @@
 #include "../include/Camera.hpp"
 #include <PubSubClient.h>
 #include <esp_sleep.h>
-#include "../include/Proxy.hpp"
+#include "../include/ConnectionManager.hpp"
+#include <memory>
 
 #define PIN_HIGH 1
 #define PIN_LOW 0
@@ -14,9 +15,9 @@
 bool sendFrameFlag = false;
 unsigned long lastMotionTime = 0;
 int motionDetectedCount = 0;
-ConnectionManager connectionManager;
+std::unique_ptr<ConnectionManager> connectionManager = std::make_unique<ConnectionManager>(std::make_unique<CameraESP32S3>());
 
-bool motionState = false;
+static bool motionState = false;
 
 void detectMotion()
 {
@@ -43,7 +44,7 @@ void setup()
     delay(500);
     Serial.print(".");
 
-    connectionManager.clientInit();
+    connectionManager->clientInit();
   }
   Serial.println();
   Serial.print("Connected! IP address: ");
@@ -70,7 +71,7 @@ void setup()
   }
 
   //pinMode(PIR_PIN, INPUT);
-  connectionManager.cm_startCamera();
+  connectionManager->cm_startCamera();
 }
 
 void loop()
@@ -80,8 +81,8 @@ void loop()
   static unsigned long lastTime = 0;
   static int frameCount = 0;
 
-  connectionManager.is_connected();
-  connectionManager.client_loop();
+  connectionManager->is_connected();
+  connectionManager->client_loop();
 
   // Check PIR sensor state
   if (digitalRead(PIR_PIN) == HIGH)
@@ -90,17 +91,17 @@ void loop()
   }
   else if (digitalRead(PIR_PIN) == LOW)
   {
-    Serial.println("Pin LOW");
+    //Serial.println("Pin LOW");
   }
   // Send the frame to the server
-  connectionManager.cm_sendframeToServer();
+  connectionManager->cm_sendframeToServer();
   // Count frames per second
   frameCount++;
   if (currentTime - lastTime >= 1000)
   { // Every second
     char logMessage[50];
     snprintf(logMessage, sizeof(logMessage), "FPS: %d", frameCount);
-    //sendLogToServer(logMessage);
+    connectionManager->sendLogToServer(logMessage);
     frameCount = 0;
     lastTime = currentTime;
   }
@@ -111,7 +112,7 @@ void loop()
     motionState = false;
     //sendLogToServer("No motion detected for 10 seconds, going to deep sleep.");
     Serial.println("Entering deep sleep...");        // Debugging line
-    connectionManager.cm_stopCamera();                                    // Deinitialize camera to reduce heating
+    connectionManager->cm_stopCamera();                                    // Deinitialize camera to reduce heating
     delay(100);                                      // Ensure the log message is sent before sleeping
     esp_sleep_enable_ext0_wakeup(PIR_PIN, PIN_HIGH); // Wake up when motion is detected (rising edge)
     esp_deep_sleep_start();

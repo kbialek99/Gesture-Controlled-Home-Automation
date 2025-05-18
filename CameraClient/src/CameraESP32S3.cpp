@@ -1,8 +1,7 @@
-#include "../include/Camera.hpp"
+#include "../include/CameraESP32S3.hpp"
 
-Camera* Camera::instancePtr = nullptr;
 
-Camera::Camera() {
+CameraESP32S3::CameraESP32S3() {
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
     config.pin_d0 = Y2_GPIO_NUM;
@@ -33,7 +32,7 @@ Camera::Camera() {
     config.fb_count = 2;                     // Double buffering for smoother frame capture
     }
 
-void Camera::startCamera() const {
+void CameraESP32S3::startCamera() const {
     // Initialize camera
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
@@ -44,7 +43,7 @@ void Camera::startCamera() const {
     }
 }
 
-void Camera::stopCamera() const
+void CameraESP32S3::stopCamera() const
 {
   esp_camera_deinit();
   //sendLogToServer("Camera deinitialized to reduce heating.");
